@@ -3,7 +3,7 @@ interface loopback0
 exit
 interface loopback10
     ip vrf forwarding MGMT
-    ip address 1.1.1.10 /32 255.255.255.255
+    ip address 1.1.1.10 255.255.255.255
 exit
 ip vrf MGMT
     rd 1337:10
@@ -12,7 +12,7 @@ ip vrf MGMT
 exit
 interface loopback20
     ip vrf forwarding INET
-    ip address 1.1.1.20 /32 255.255.255.255
+    ip address 1.1.1.20 255.255.255.255
 exit
 ip vrf INET
     rd 1337:20
@@ -21,7 +21,7 @@ ip vrf INET
 exit
 interface loopback30
     ip vrf forwarding UNET
-    ip address 1.1.1.30 /32 255.255.255.255
+    ip address 1.1.1.30 255.255.255.255
 exit
 ip vrf UNET
     rd 1337:30
