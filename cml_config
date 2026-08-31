@@ -1,0 +1,173 @@
+crypto ikev2 proposal DMVPN-PROP
+ encryption aes-cbc-256
+ integrity sha256
+ group 14
+!
+crypto ikev2 policy DMVPN-POLE
+ proposal DMVPN-PROP
+!
+crypto ikev2 keyring DMVPN-KEYRING
+ peer DMVPN-PEER
+  address 0.0.0.0 0.0.0.0
+  pre-shared-key DMVPN-KEY
+ !
+!
+!
+crypto ikev2 profile DMVPN-PROF
+ match identity remote address 0.0.0.0
+ authentication remote pre-share
+ authentication local pre-share
+ keyring local DMVPN-KEYRING
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+!
+crypto ipsec transform-set DMVPN-TRANS esp-aes 256 esp-sha256-hmac
+ mode transport
+!
+crypto ipsec profile DMVPN-IPSEC-PROF
+ set transform-set DMVPN-TRANS
+ set ikev2-profile DMVPN-PROF
+!
+!
+!
+!
+!
+!
+!
+!
+interface Loopback0
+ ip address 1.1.1.1 255.255.255.255
+!
+interface Loopback10
+ ip vrf forwarding MGMT
+ ip address 1.1.1.10 255.255.255.255
+!
+interface Loopback20
+ ip vrf forwarding INTERNET
+ ip address 1.1.1.20 255.255.255.255
+!
+interface Loopback30
+ ip vrf forwarding BEDRIFT
+ ip address 1.1.1.30 255.255.255.255
+!
+interface Tunnel30
+ ip vrf forwarding BEDRIFT
+ ip address 30.30.30.11 255.255.255.0
+ no ip redirects
+ ip nhrp map 30.30.30.1 6.6.6.6
+ ip nhrp map multicast 6.6.6.6
+ ip nhrp network-id 30
+ ip nhrp nhs 30.30.30.1
+ tunnel source Loopback0
+ tunnel mode gre multipoint
+ tunnel protection ipsec profile DMVPN-IPSEC-PROF
+!
+interface Ethernet0/0
+ ip vrf forwarding BEDRIFT
+ ip address 10.0.0.1 255.255.255.0
+!
+interface Ethernet0/1
+ ip address dhcp
+ ip ospf 1 area 0
+ mpls ip
+!
+interface Ethernet0/2
+ no ip address
+ shutdown
+!
+interface Ethernet0/3
+ no ip address
+ shutdown
+!
+!
+router eigrp BEDRIFT-DMVPN-EIGRP
+ !
+ address-family ipv4 unicast vrf BEDRIFT autonomous-system 1
+  !
+  topology base
+  exit-af-topology
+  network 1.1.1.30 0.0.0.0
+  network 10.0.0.0 0.0.0.255
+  network 30.30.30.0 0.0.0.255
+ exit-address-family
+!
+router ospf 1
+ router-id 1.1.1.1
+ network 1.1.1.1 0.0.0.0 area 0
+ network 192.168.1.0 0.0.0.255 area 0
+!
+router bgp 65000
+ bgp log-neighbor-changes
+ neighbor 2.2.2.2 remote-as 65000
+ neighbor 2.2.2.2 update-source Loopback0
+ neighbor 6.6.6.6 remote-as 65000
+ neighbor 6.6.6.6 update-source Loopback0
+ !
+ address-family vpnv4
+  neighbor 2.2.2.2 activate
+  neighbor 2.2.2.2 send-community extended
+  neighbor 6.6.6.6 activate
+  neighbor 6.6.6.6 send-community extended
+ exit-address-family
+ !
+ address-family ipv4 vrf BEDRIFT
+ exit-address-family
+ !
+ address-family ipv4 vrf INTERNET
+ exit-address-family
+ !
+ address-family ipv4 vrf MGMT
+  network 1.1.1.10 mask 255.255.255.255
+ exit-address-family
+!
+ip forward-protocol nd
+!
+!
+ip http server
+ip http secure-server
+ip ssh bulk-mode 131072
+no logging btrace
+mpls ldp router-id Loopback0 force
+!
+!
+!
+control-plane
+!
+!
+!
+line con 0
+ activation-character 13
+ logging synchronous
+line aux 0
+ activation-character 13
+line vty 0 4
+ activation-character 13
+ login
+ transport input ssh
+!
+!
+!
+!
+end
+
+hub
+interface Tunnel30
+ ip vrf forwarding BEDRIFT
+ ip address 30.30.30.1 255.255.255.0
+ no ip redirects
+ no ip next-hop-self eigrp 1
+ no ip split-horizon eigrp 1
+ ip nhrp network-id 30
+ tunnel source Loopback0
+ tunnel mode gre multipoint
+ tunnel protection ipsec profile DMVPN-IPSEC-PROF
+end
