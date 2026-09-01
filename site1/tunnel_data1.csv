@@ -1,0 +1,2 @@
+tunnel id,vrf,ip address,mask,source,destination,gre mode,network-id
+tunnel 30,UNET,192.168.0.31,255.255.255.0,1.1.1.1,-,multipoint,30

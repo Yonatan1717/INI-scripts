@@ -5,55 +5,66 @@
                 "router-id 1.1.1.0"
             ],
             "interface loopback0": [
-                "ip address 1.1.1.0 255.255.255.255"
+                "ip address 1.1.1.0 255.255.255.255",
+                "exit"
             ],
             "interface g0//1": [
                 "ip address dhcp",
                 "ip ospf 1 area 0",
                 "mpls ip",
-                "no shutdown"
+                "no shutdown",
+                "exit"
             ],
             "ip vrf MGMT": [
                 "rd 1337:10",
                 "route-target export 1337:10",
-                "route-target import 1337:10"
+                "route-target import 1337:10",
+                "exit"
             ],
             "interface loopback10": [
                 "ip vrf forwarding MGMT",
-                "ip address 1.1.1.10 255.255.255.255"
+                "ip address 1.1.1.10 255.255.255.255",
+                "exit"
             ],
             "ip vrf INET": [
                 "rd 1337:20",
                 "route-target export 1337:20",
-                "route-target import 1337:20"
+                "route-target import 1337:20",
+                "exit"
             ],
             "interface loopback20": [
                 "ip vrf forwarding INET",
-                "ip address 1.1.1.20 255.255.255.255"
+                "ip address 1.1.1.20 255.255.255.255",
+                "exit"
             ],
             "ip vrf UNET": [
                 "rd 1337:30",
                 "route-target export 1337:30",
-                "route-target import 1337:30"
+                "route-target import 1337:30",
+                "exit"
             ],
             "interface loopback30": [
                 "ip vrf forwarding UNET",
-                "ip address 1.1.1.30 255.255.255.255"
+                "ip address 1.1.1.30 255.255.255.255",
+                "exit"
             ],
             "interface g0/0.10": [
                 "ip vrf forwarding MGMT",
                 "ip address 10.11.0.1 255.255.0.0",
-                "no shutdown"
+                "no shutdown",
+                "exit"
             ],
             "interface g0/0.20": [
                 "ip vrf forwarding INET",
                 "ip address 10.21.0.1 255.255.0.0",
-                "no shutdown"
+                "no shutdown",
+                "exit"
             ],
             "interface g0/0.30": [
                 "ip vrf forwarding UNET",
                 "ip address 10.31.0.1 255.255.0.0",
-                "no shutdown"
+                "no shutdown",
+                "exit"
             ],
             "ip router bgp 1337": [
                 {
@@ -73,6 +84,13 @@
                         "exit-address-family"
                     ]
                 }
+            ],
+            "interface tunnel 30": [
+                "ip vrf forwarding UNET",
+                "ip address 192.168.0.31 mask 255.255.255.0",
+                "tunnel source 1.1.1.1",
+                "tunnel mode gre multipoint",
+                "exit-tunnel"
             ]
         },
         "network_info": {
@@ -118,135 +136,17 @@
                 "sub": true,
                 "address": "10.31.0.1",
                 "mask": "255.255.0.0"
+            },
+            "tunnel 30": {
+                "is hub": true,
+                "vrf": "UNET",
+                "ip address": "192.168.0.31",
+                "mask": "255.255.255.0",
+                "source": "1.1.1.1",
+                "tunnel id": "tunnel 30",
+                "mode": "multipoint"
             }
         },
         "intf_prefix": "g0/"
-    },
-    "site 2": {
-        "config": {
-            "router ospf 1": [
-                "router-id 2.2.2.0"
-            ],
-            "interface loopback0": [
-                "ip address 2.2.2.0 255.255.255.255"
-            ],
-            "interface f0/0//1": [
-                "ip address dhcp",
-                "ip ospf 1 area 0",
-                "mpls ip",
-                "no shutdown"
-            ],
-            "ip vrf MGMT": [
-                "rd 1337:10",
-                "route-target export 1337:10",
-                "route-target import 1337:10"
-            ],
-            "interface loopback10": [
-                "ip vrf forwarding MGMT",
-                "ip address 1.1.1.10 255.255.255.255"
-            ],
-            "ip vrf INET": [
-                "rd 1337:20",
-                "route-target export 1337:20",
-                "route-target import 1337:20"
-            ],
-            "interface loopback20": [
-                "ip vrf forwarding INET",
-                "ip address 1.1.1.20 255.255.255.255"
-            ],
-            "ip vrf UNET": [
-                "rd 1337:30",
-                "route-target export 1337:30",
-                "route-target import 1337:30"
-            ],
-            "interface loopback30": [
-                "ip vrf forwarding UNET",
-                "ip address 1.1.1.30 255.255.255.255"
-            ],
-            "interface f0/0/0.10": [
-                "ip vrf forwarding MGMT",
-                "ip address 10.11.0.1 255.255.0.0",
-                "no shutdown"
-            ],
-            "interface f0/0/0.20": [
-                "ip vrf forwarding INET",
-                "ip address 10.21.0.1 255.255.0.0",
-                "no shutdown"
-            ],
-            "interface f0/0/0.30": [
-                "ip vrf forwarding UNET",
-                "ip address 10.31.0.1 255.255.0.0",
-                "no shutdown"
-            ],
-            "ip router bgp 1337": [
-                "neighbor 1.1.1.0 remote-as 1337",
-                "neighbor 1.1.1.0 update-source loopback0",
-                {
-                    "address-family vpnv4": [
-                        "neighbor 1.1.1.0 activate",
-                        "neighbor 1.1.1.0 send-community extended",
-                        "exit-address-family"
-                    ]
-                },
-                {
-                    "address-family ipv4 vrf MGMT": [
-                        "network 10.11.0.0 mask 255.255.0.0",
-                        "exit-address-family"
-                    ]
-                },
-                {
-                    "address-family ipv4 vrf INET": [
-                        "network 10.21.0.0 mask 255.255.0.0",
-                        "exit-address-family"
-                    ]
-                }
-            ]
-        },
-        "network_info": {
-            "loopback0": {
-                "address": "2.2.2.0",
-                "mask": "255.255.255.255"
-            },
-            "MGMT": {
-                "rd": "1337:10",
-                "loopback": 10,
-                "laddr": "1.1.1.10"
-            },
-            "INET": {
-                "rd": "1337:20",
-                "loopback": 20,
-                "laddr": "1.1.1.20"
-            },
-            "UNET": {
-                "rd": "1337:30",
-                "loopback": 30,
-                "laddr": "1.1.1.30"
-            },
-            "f0/0/0.10": {
-                "vrf": "MGMT",
-                "vlan": 10,
-                "interface": 0,
-                "sub": true,
-                "address": "10.11.0.1",
-                "mask": "255.255.0.0"
-            },
-            "f0/0/0.20": {
-                "vrf": "INET",
-                "vlan": 20,
-                "interface": 0,
-                "sub": true,
-                "address": "10.21.0.1",
-                "mask": "255.255.0.0"
-            },
-            "f0/0/0.30": {
-                "vrf": "UNET",
-                "vlan": 30,
-                "interface": 0,
-                "sub": true,
-                "address": "10.31.0.1",
-                "mask": "255.255.0.0"
-            }
-        },
-        "intf_prefix": "f0/0/"
     }
 }
