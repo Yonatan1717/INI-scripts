@@ -267,7 +267,7 @@ def create_mp_bgp_config(vrf_data, ip_data, sites_data, router_id, site_number):
     return my_data, sites_data
 
 
-def create_ipsec_config(network_id, psk=DEFAULT_IPSEC_PSK):
+def create_ipsec_config(network_id, vrf, psk=DEFAULT_IPSEC_PSK):
     """
     Lager IKEv2/IPsec-konfigurasjon for én DMVPN-tunnel.
 
@@ -293,6 +293,7 @@ def create_ipsec_config(network_id, psk=DEFAULT_IPSEC_PSK):
     ]
 
     config[f"crypto ikev2 policy {policy}"] = [
+        f"match fvrf {vrf}",
         f"proposal {proposal}",
         "exit",
     ]
@@ -310,6 +311,7 @@ def create_ipsec_config(network_id, psk=DEFAULT_IPSEC_PSK):
     ]
 
     config[f"crypto ikev2 profile {ikev2_profile}"] = [
+        f"match fvrf {vrf}",
         "match identity remote address 0.0.0.0 0.0.0.0",
         "authentication remote pre-share",
         "authentication local pre-share",
@@ -405,7 +407,7 @@ def create_tunnel_config(tunnel_data, sites_data: dict, is_hub: bool):
 
         # IPsec aktiveres bare når kolonnen 'ipsec' er TRUE/1/yes/ja/x.
         if ipsec_enabled:
-            ipsec_config, ipsec_profile = create_ipsec_config(network_id, psk)
+            ipsec_config, ipsec_profile = create_ipsec_config(network_id, vrf, psk)
             my_data["config"].update(ipsec_config)
             tun_s.append(f"tunnel protection ipsec profile {ipsec_profile}")
 
