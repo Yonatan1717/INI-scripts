@@ -55,18 +55,19 @@ def getNetId(ip, mask):
 
     return ".".join(netid), ".".join(mask), ".".join(wild)
 
-def create_vrf(vrf_data):
+def create_vrf(vrf_data, sn):
     my_data = {}
     my_data["config"] = {}
     my_data["network_info"] = {}
     
     for index, row in vrf_data.iterrows():
         vrf_name = row['vrf']
-        vrf_rd = row['rd']
+        vrf_rt = row['rt']
+        vrf_rd = row['rt'].replace(":", f":{sn}")
         vrf_loopback = row['loopback']
         vrf_laddr= row['laddr']
         my_data["network_info"][vrf_name] = {
-            "rd": vrf_rd,
+            "rt": vrf_rt,
             "loopback": vrf_loopback,
             "laddr": vrf_laddr
         }
@@ -74,8 +75,8 @@ def create_vrf(vrf_data):
         print(f"lager VRF: {vrf_name} med RD: {vrf_rd}")
         vrf_s = []
         vrf_s.append(f"rd {vrf_rd}")
-        vrf_s.append(f"route-target export {vrf_rd}")
-        vrf_s.append(f"route-target import {vrf_rd}")
+        vrf_s.append(f"route-target export {vrf_rt}")
+        vrf_s.append(f"route-target import {vrf_rt}")
         vrf_s.append(f"exit")
         my_data["config"][f"ip vrf {vrf_name}"] = vrf_s
         intf_s = []
@@ -112,11 +113,18 @@ def create_interface(ip_data, intf_prefix):
 
         print(f"lager Interface for VRF: {vrf} med IP: {ip_address} og Mask: {mask}")
         intf_s = []
+        intf_s.append(f"encapsulation dot1Q {vlan}")
         intf_s.append(f"ip vrf forwarding {vrf}")
         intf_s.append(f"ip address {ip_address} {mask}")
         intf_s.append("no shutdown")
         intf_s.append("exit")
         my_data["config"][f"interface {intf_prefix}{intf}.{vlan}" if sub else f"interface {intf_prefix}{intf}"] = intf_s
+
+        #slå på parre (enable the interface)
+        intf_s = []
+        intf_s.append("no shutdown")
+        intf_s.append("exit")
+        my_data["config"][f"interface {intf_prefix}{intf}"] = intf_s
 
     return my_data
 
@@ -128,9 +136,9 @@ def create_mp_bgp_config(vrf_data, ip_data, sites_data, router_id, site_number):
     bgp_s = []
     vpnv4_s= []
    
-    rd = list(vrf_data.iterrows())[0][1]['rd']
+    rt = list(vrf_data.iterrows())[0][1]['rt']
          
-    as_num = rd.split(":")[0]
+    as_num = rt.split(":")[0]
         
     tmp = f"neighbor {router_id} remote-as {as_num}"
     tmp2 = f"neighbor {router_id} update-source loopback0"
@@ -154,23 +162,23 @@ def create_mp_bgp_config(vrf_data, ip_data, sites_data, router_id, site_number):
 
         # update BGP neighbor configuration for each site
 
-        l = sites_data[site]["config"][f"ip router bgp {as_num}"][:-3]
-        sites_data[site]["config"][f"ip router bgp {as_num}"] = sites_data[site]["config"][f"ip router bgp {as_num}"][-3:]
+        l = sites_data[site]["config"][f"router bgp {as_num}"][:-3]
+        sites_data[site]["config"][f"router bgp {as_num}"] = sites_data[site]["config"][f"router bgp {as_num}"][-3:]
         l.insert(0, tmp)
         l.insert(1, tmp2)
         l = list(set(l)) 
         for i,x in enumerate(l):
-            sites_data[site]["config"][f"ip router bgp {as_num}"].insert(0, x)
+            sites_data[site]["config"][f"router bgp {as_num}"].insert(0, x)
 
          
-        l = sites_data[site]["config"][f"ip router bgp {as_num}"][-3][f"address-family vpnv4"][:-1]
+        l = sites_data[site]["config"][f"router bgp {as_num}"][-3][f"address-family vpnv4"][:-1]
 
         l.insert(0, vpn_tmp)
         l.insert(0, vpn_tmp2)
         l = list(set(l))
         l.append("exit-address-family")
 
-        sites_data[site]["config"][f"ip router bgp {as_num}"][-3][f"address-family vpnv4"] = l
+        sites_data[site]["config"][f"router bgp {as_num}"][-3][f"address-family vpnv4"] = l
 
     vpnv4_s.append("exit-address-family")
     bgp_s.append({f"address-family vpnv4": vpnv4_s})
@@ -189,7 +197,7 @@ def create_mp_bgp_config(vrf_data, ip_data, sites_data, router_id, site_number):
         bgp_s.append({f"address-family ipv4 vrf {vrf}": ipv4_s})
 
 
-    my_data["config"][f"ip router bgp {as_num}"] = bgp_s
+    my_data["config"][f"router bgp {as_num}"] = bgp_s
     
     return my_data, sites_data
 
@@ -231,8 +239,8 @@ def create_tunnel_config(tunnel_data, sites_data: dict, is_hub: bool):
 
         tun_s = []
         tun_s.append(f"ip vrf forwarding {vrf}")
-        tun_s.append(f"ip address {ip_address} mask {mask}")
-        tun_s.append(f"tunnel source {source}")
+        tun_s.append(f"ip address {ip_address} {mask}")
+        tun_s.append(f"tunnel source Loopback0")
 
         if mode == "multipoint":
             tun_s.append(f"tunnel mode gre {mode}")
@@ -242,22 +250,23 @@ def create_tunnel_config(tunnel_data, sites_data: dict, is_hub: bool):
 
                 tun_s.append(f"ip nhrp map {hub_tun_ip} {hub_source}")
                 tun_s.append(f"ip nhrp map multicast {hub_source}")
-                tun_s.append(f"ip nhrp map multicast {hub_source}")
-                tun_s.append(f"ip nhrp network-id {network_id}")
                 tun_s.append(f"ip nhrp nhs {hub_tun_ip}")
             else:
-                tun_s.append(f"no ip split-horizon eigrp {network_id}")
-                tun_s.append(f"no ip next-hop-self eigrp {network_id}")
+                tun_s.append(f"ip nhrp map multicast dynamic")
+
+
+            tun_s.append(f"ip nhrp network-id {network_id}")
+
         else:
             print(f"Mode må være multipoint for tunnel {tunnel}")
 
-        tun_s.append("exit-tunnel")
+        tun_s.append("exit")
         my_data["config"][f"interface {tunnel}"] = tun_s
         my_data["network_info"][tunnel] = tunnel_info
 
     return my_data
 
-def create_tunnel_eigrp_config(tunnel_data, ip_data, is_hub):
+def create_tunnel_eigrp_config(vrf_data, tunnel_data, ip_data, is_hub):
     my_data = {}
     my_data["network_info"] = {}
     my_data["config"] = {}
@@ -266,9 +275,6 @@ def create_tunnel_eigrp_config(tunnel_data, ip_data, is_hub):
     networks = []
     for idx, row in tunnel_data.iterrows():
         network_id = row["network-id"]
-        source = row["source"]
-        source_mask = "255.255.255.255"
-        source_netinfo = getNetId(source, source_mask)
         tun = row["tunnel id"]
 
         vrf = row["vrf"]
@@ -276,15 +282,22 @@ def create_tunnel_eigrp_config(tunnel_data, ip_data, is_hub):
         ip = row["ip address"]
         mask = row["mask"]
 
+        #hent riktig vrf rad fra vrf_data
+        vrf_info = vrf_data[vrf_data["vrf"] == vrf]
+        laddr = vrf_info["laddr"].values[0]
+        lop_mask = "255.255.255.255"
+
+
         netinfo = getNetId(ip, mask)
+        vrf_loopback_netinfo = getNetId(laddr, lop_mask)
 
         networks.append(netinfo)
-        networks.append(source_netinfo)
+        networks.append(vrf_loopback_netinfo)
 
         vrfs[vrf].insert(0, network_id)
         vrfs[vrf].insert(1, tun)
         vrfs[vrf].append(netinfo)
-        vrfs[vrf].append(source_netinfo)
+        vrfs[vrf].append(vrf_loopback_netinfo)
 
 
     for idx, row in ip_data.iterrows():
@@ -345,11 +358,14 @@ def create_global_config(router_id, intf_prefix):
 
     ospf_s = []
     ospf_s.append(f"router-id {router_id}")
+    ospf_s.append(f"exit")
     my_data["config"]["router ospf 1"] = ospf_s
 
     my_data["config"]["interface loopback0"] = []
     my_data["config"]["interface loopback0"].append(f"ip address {router_id} 255.255.255.255")
+    my_data["config"]["interface loopback0"].append(f"ip ospf 1 area 0")
     my_data["config"]["interface loopback0"].append(f"exit")
+    my_data["config"]["mpls ldp router-id Loopback0 force"] = []
 
     intf_s = []
     intf_s.append("ip address dhcp")
@@ -384,7 +400,7 @@ def configure_site(sheet_file, config_file, sheet):
     data, is_hub = fetch_site_data(config_file, sn)
     my_data = create_global_config(router_id, intf_prefix)
 
-    d_vrf = create_vrf(vrf_data)
+    d_vrf = create_vrf(vrf_data, sn)
     my_data["config"].update(d_vrf["config"])
     my_data["network_info"].update(d_vrf["network_info"])
 
@@ -399,7 +415,7 @@ def configure_site(sheet_file, config_file, sheet):
     my_data["config"].update(d_tunnel["config"])
     my_data["network_info"].update(d_tunnel["network_info"])
 
-    d_eigrp = create_tunnel_eigrp_config(tunnel_data, ip_data, is_hub)
+    d_eigrp = create_tunnel_eigrp_config(vrf_data, tunnel_data, ip_data, is_hub)
     my_data["config"].update(d_eigrp["config"])
     my_data["network_info"].update(d_eigrp["network_info"])
 
