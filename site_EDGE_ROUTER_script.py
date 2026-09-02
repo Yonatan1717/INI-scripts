@@ -3,6 +3,7 @@ import sys
 import json
 import pandas as pd
 from openpyxl import load_workbook
+import ipaddress
 
 DEFAULT_IPSEC_PSK = "DMVPN-KEY"
 SSH_DOMAIN = "lab.local"
@@ -34,7 +35,7 @@ def read_sheet(filename, sheet):
         "ip_data": pd.read_excel(
             filename,
             sheet_name=sheet,
-            usecols="A:H",
+            usecols="A:J",
             skiprows=3,
             nrows=4
         ),
@@ -105,8 +106,6 @@ def create_vrf(vrf_data, sn):
             "laddr": vrf_laddr
         }
 
-        print(f"lager VRF: {vrf_name} med RD: {vrf_rd}")
-
         vrf_s = []
         vrf_s.append(f"rd {vrf_rd}")
         vrf_s.append(f"route-target export {vrf_rt}")
@@ -128,10 +127,17 @@ def create_interface(ip_data, intf_prefix):
     my_data["config"] = {}
     my_data["network_info"] = {}
     intf_nums = list(ip_data["interface"])
+    
+    tot_pri = ip_data["pri-1-10"].sum()
+    pri_prc_for_class_default = 25
+    pri_left = 100 - pri_prc_for_class_default
+    pol_maps= {}
 
     for index, row in ip_data.iterrows():
         vrf = row["vrf"]
         vlan = row["vlan"]
+        pri = row["pri-1-10"]
+        pri_prc = int((pri / tot_pri) * pri_left)
 
         intf = row["interface"]
         sub = True if intf_nums.count(intf) > 1 else False
@@ -147,10 +153,9 @@ def create_interface(ip_data, intf_prefix):
             "interface": intf,
             "sub": sub,
             "address": ip_address,
-            "mask": mask
+            "mask": mask,
+            "pri_prc": pri_prc,
         }
-
-        print(f"lager Interface for VRF: {vrf} med IP: {ip_address} og Mask: {mask}")
 
         intf_s = []
 
@@ -167,11 +172,38 @@ def create_interface(ip_data, intf_prefix):
             else f"interface {intf_prefix}{intf}"
         ] = intf_s
 
-        # Slå på parent-interface.
-        intf_s = []
-        intf_s.append("no shutdown")
-        intf_s.append("exit")
-        my_data["config"][f"interface {intf_prefix}{intf}"] = intf_s
+        if sub:
+            my_data["config"][f"class-map match-any QRS-CLASS-{vlan}"] = [
+                f"match input-interface {intf_prefix}{intf}.{vlan}",
+                "exit"
+            ]
+
+            if f"policy-map QRS-SITE-POLICY" not in pol_maps:
+                pol_maps[f"policy-map QRS-SITE-POLICY"] = []
+
+            pol_maps[f"policy-map QRS-SITE-POLICY"].append(
+                {
+                    f"class QRS-CLASS-{vlan}": [
+                        f"bandwidth percent {pri_prc}", 
+                        "exit"
+                    ]
+                }   
+            )
+
+    intf_s = []
+    intf_s.append("no shutdown")
+    intf_s.append("exit")
+    my_data["config"][f"interface {intf_prefix}{intf}"] = intf_s
+    
+    if f"policy-map QRS-SITE-POLICY" in pol_maps:
+        my_data["config"].update(pol_maps)
+        
+        my_data["config"][f"\ninterface {intf_prefix}1"] = [
+            "service-policy output QRS-SITE-POLICY",
+            "exit"
+        ]
+
+        
 
     return my_data
 
@@ -382,6 +414,7 @@ def create_tunnel_config(tunnel_data, sites_data: dict, is_hub: bool):
 
         tun_s = []
         tun_s.append(f"ip vrf forwarding {vrf}")
+        tun_s.append(f"qos pre-classify")
         tun_s.append(f"ip address {ip_address} {mask}")
         tun_s.append(f"tunnel source {source}")
         tun_s.append(f"tunnel vrf {vrf}")
@@ -509,7 +542,7 @@ def enable_ssh(md, domain=SSH_DOMAIN):
     my_data["config"][
         f"username {username} privilege 15 secret {password}"
     ] = []
-    my_data["config"]["crypto key generate rsa modulus 4096"] = []
+    my_data["config"]["crypto key generate rsa general-keys modulus 4096"] = []
     my_data["config"]["ip ssh version 2"] = []
     my_data["config"][f"line vty {' '.join(x.strip(' ') for x in vty_lines.split('-'))}"] = [
         "login local",
@@ -580,6 +613,39 @@ def create_global_config(router_id, intf_prefix, sn):
     return my_data
 
 
+def set_up_DHCP_for_vrf_lans(ip_data):
+    my_config = {}
+    my_config["config"] = {}
+    my_config["network_info"] = {}
+
+    for idx, row in ip_data.iterrows():
+        vrf = row["vrf"]
+        ip_gw = row["address min"]
+        network = row["nett id"]
+        mask = row["mask"]
+        num_res = row["antall-res"]
+        
+        ip_res_to = str(ipaddress.ip_address(ip_gw) + num_res)
+        
+        my_config["config"][f"ip dhcp pool DHCP-{vrf}"] = [
+            f"vrf {vrf}",
+            f"network {network} {mask}",
+            f"default-router {ip_gw}",
+            "exit"
+        ]
+
+        my_config["config"][f"ip dhcp excluded-address vrf {vrf} {ip_gw} {ip_res_to}"] = []
+
+        my_config["network_info"][f"DHCP-{vrf}"] = {
+            "network": network,
+            "mask": mask,
+            "default-router": ip_gw,
+            "ip_res_to": ip_res_to
+        }
+        
+    return my_config
+
+    
 def configure_site(sheet_file, config_file, sheet):
     sheet_data = read_sheet(sheet_file, sheet)
 
@@ -587,6 +653,7 @@ def configure_site(sheet_file, config_file, sheet):
     my_data["config"] = {}
     my_data["network_info"] = {}
 
+    #HENT NØDVENDIG DATA 
     ip_data = sheet_data["ip_data"]
     vrf_data = sheet_data["vrf_data"]
     tunnel_data = sheet_data["tunnel_data"]
@@ -597,44 +664,52 @@ def configure_site(sheet_file, config_file, sheet):
     intf_prefix = md.iloc[0]["intf_prefix"]
 
     data, is_hub = fetch_site_data(config_file, sn)
-
-    my_data = create_global_config(router_id, intf_prefix, sn)
-
     
-
+    #OPPRETT GLOBAL KONFIGURASJON
+    my_data = create_global_config(router_id, intf_prefix, sn)
+    
+    #SSH
+    d_ssh = enable_ssh(md)
+    my_data["config"].update(d_ssh["config"])
+    
+    #VRF
     d_vrf = create_vrf(vrf_data, sn)
     my_data["config"].update(d_vrf["config"])
     my_data["network_info"].update(d_vrf["network_info"])
 
+    #INTERFACE
     d_ip = create_interface(ip_data, intf_prefix)
     my_data["config"].update(d_ip["config"])
     my_data["network_info"].update(d_ip["network_info"])
-
-    d_bgp, data = create_mp_bgp_config(
-        vrf_data, tunnel_data, ip_data, data, router_id, sn
-    )
+    
+    #DHCP
+    d_dhcp = set_up_DHCP_for_vrf_lans(ip_data)
+    my_data["config"].update(d_dhcp["config"])
+    my_data["network_info"].update(d_dhcp["network_info"])
+    
+    #BGP
+    d_bgp, data = create_mp_bgp_config(vrf_data, tunnel_data, ip_data, data, router_id, sn)
     my_data["config"].update(d_bgp["config"])
 
+    #TUNNEL
     d_tunnel = create_tunnel_config(tunnel_data, data, is_hub)
     my_data["config"].update(d_tunnel["config"])
     my_data["network_info"].update(d_tunnel["network_info"])
 
-    d_eigrp = create_tunnel_eigrp_config(
-        vrf_data, tunnel_data, ip_data, is_hub
-    )
+    #EIGRP
+    d_eigrp = create_tunnel_eigrp_config(vrf_data, tunnel_data, ip_data, is_hub)
     my_data["config"].update(d_eigrp["config"])
     my_data["network_info"].update(d_eigrp["network_info"])
     
-    
-    d_ssh = enable_ssh(md)
-    my_data["config"].update(d_ssh["config"])
-
+    #INTerFACE PREFIX
     my_data["intf_prefix"] = intf_prefix
 
+    #LAGRE
     data[f"site {sn}"] = my_data
 
     with open(config_file, "w") as f:
         json.dump(data, f, indent=4)
+        print(f"Config for site {sn} har blitt lagret i {config_file}")
 
     return data
 
@@ -677,6 +752,8 @@ def create_or_update_config_files(data):
             encoding="utf-8"
         ) as f:
             f.write("\n".join(text))
+            
+        print(f"Text versjon av config for site {site} har blitt lagret i site_text_configs/{site}.txt")
 
 
 def main():
@@ -696,8 +773,11 @@ def main():
 
     for sheet in sheets:
         data.update(configure_site(sheet_file, config_file, sheet))
+    
+    print()
 
     create_or_update_config_files(data)
+    print("\nAlle config har blitt lagret.")
 
 
 if __name__ == "__main__":
