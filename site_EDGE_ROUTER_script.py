@@ -176,7 +176,7 @@ def create_interface(ip_data, intf_prefix):
     return my_data
 
 
-def create_mp_bgp_config(vrf_data, ip_data, sites_data, router_id, site_number):
+def create_mp_bgp_config(vrf_data, tunnel_data, ip_data, sites_data, router_id, site_number):
     my_data = {}
     my_data["config"] = {}
     my_data["network_info"] = {}
@@ -245,14 +245,16 @@ def create_mp_bgp_config(vrf_data, ip_data, sites_data, router_id, site_number):
         ipv4_s = []
         vrf = row["vrf"]
 
+        is_tunnel = tunnel_data[tunnel_data["vrf"] == vrf].shape[0] > 0
+        
+        
         loop_addr = vrf_data[vrf_data["vrf"] == vrf]["laddr"].values[0]
         loop_mask = "255.255.255.255"
 
         network = row["nett id"]
         mask = row["mask"]
 
-        # UNET-LAN-et går over DMVPN/EIGRP, ikke direkte via MP-BGP.
-        if vrf != "UNET":
+        if not is_tunnel:
             ipv4_s.append(f"network {network} mask {mask}")
 
         # Loopbacken annonseres i VRF-en.
@@ -269,10 +271,7 @@ def create_mp_bgp_config(vrf_data, ip_data, sites_data, router_id, site_number):
 
 def create_ipsec_config(network_id, vrf, psk=DEFAULT_IPSEC_PSK):
     """
-    Lager IKEv2/IPsec-konfigurasjon for én DMVPN-tunnel.
-
-    Navnene gjøres unike per network-id, slik at flere tunneler kan eksistere
-    på samme router.
+    Lager IPsec-konfigurasjon for en DMVPN-tunnel.
     """
     suffix = str(network_id).strip()
 
@@ -612,7 +611,7 @@ def configure_site(sheet_file, config_file, sheet):
     my_data["network_info"].update(d_ip["network_info"])
 
     d_bgp, data = create_mp_bgp_config(
-        vrf_data, ip_data, data, router_id, sn
+        vrf_data, tunnel_data, ip_data, data, router_id, sn
     )
     my_data["config"].update(d_bgp["config"])
 
