@@ -248,8 +248,8 @@ def create_mp_bgp_config(vrf_data, tunnel_data, ip_data, sites_data, router_id, 
         is_tunnel = tunnel_data[tunnel_data["vrf"] == vrf].shape[0] > 0
         
         
-        loop_addr = vrf_data[vrf_data["vrf"] == vrf]["laddr"].values[0]
-        loop_mask = "255.255.255.255"
+        vrf_loop_addr = vrf_data[vrf_data["vrf"] == vrf]["laddr"].values[0]
+        vrf_loop_mask = "255.255.255.255"
 
         network = row["nett id"]
         mask = row["mask"]
@@ -257,8 +257,8 @@ def create_mp_bgp_config(vrf_data, tunnel_data, ip_data, sites_data, router_id, 
         if not is_tunnel:
             ipv4_s.append(f"network {network} mask {mask}")
 
-        # Loopbacken annonseres i VRF-en.
-        ipv4_s.append(f"network {loop_addr} mask {loop_mask}")
+     
+        ipv4_s.append(f"network {vrf_loop_addr} mask {vrf_loop_mask}")
         ipv4_s.append("exit-address-family")
 
         bgp_s.append({f"address-family ipv4 vrf {vrf}": ipv4_s})
