@@ -726,7 +726,6 @@ def configure_site(sheet_file, config_file, sheet):
 
     with open(config_file, "w") as f:
         json.dump(data, f, indent=4)
-        print(f"Config for site {sn} har blitt lagret i {config_file}")
 
     return data
 
@@ -759,23 +758,39 @@ def config_to_text(data, indent=0):
 def create_or_update_config_files(data):
     del data["hub"]
 
+    if not os.path.exists("site_edge_router_text_configs"):
+        os.makedirs("site_edge_router_text_configs")
+
     for site, site_data in data.items():
         config = site_data["config"]
         text = config_to_text(config)
 
         with open(
-            f"site_text_configs/{site}.txt",
+            f"site_edge_router_text_configs/{site}.txt",
             "w",
             encoding="utf-8"
         ) as f:
             f.write("\n".join(text))
             
-        print(f"Text versjon av config for site {site} har blitt lagret i site_text_configs/{site}.txt")
+    
+    print()
+    print(f"Text versjon av config for edge router i site {site} er fullført og lagret i site_edge_router_text_configs/{site}.txt")
+    print()
+    
 
+
+def create_edge_router_configs_main(file, config_file="EDGE_ROUTER_configs.json"):   
+
+    sites_sheets = load_workbook(file).sheetnames
+    
+    for sheet in sites_sheets:
+        data = configure_site(file, config_file, sheet)
+    
+    create_or_update_config_files(data)
 
 def main():
-    if not os.path.exists("site_text_configs"):
-        os.makedirs("site_text_configs")
+    if not os.path.exists("site_edge_router_text_configs"):
+        os.makedirs("site_edge_router_text_configs")
 
     sheet_file = sys.argv[1]
     config_file = (
@@ -784,17 +799,7 @@ def main():
         else "EDGE_ROUTER_configs.json"
     )
 
-    sheets = load_workbook(sheet_file).sheetnames
-
-    data = {}
-
-    for sheet in sheets:
-        data.update(configure_site(sheet_file, config_file, sheet))
-    
-    print()
-
-    create_or_update_config_files(data)
-    print("\nAlle config har blitt lagret.")
+    create_edge_router_configs_main(sheet_file, config_file)
 
 
 if __name__ == "__main__":

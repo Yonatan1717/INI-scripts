@@ -253,29 +253,115 @@ def update_site_config(data,swi_data, sn, conf):
 
     return data
 
-file = sys.argv[1]
-sheet = sys.argv[2]
-sheet_data = read_sheet(file, sheet)
 
-data = {}
+def fetch_site_data(config_file):
+    try:
+        data = {}
 
-md = sheet_data["md"]
-swi_data = sheet_data["swi_data"]
+        with open(config_file, "r") as f:
+            try:
+                data = json.load(f)
+            except json.JSONDecodeError:
+                data = {}
 
-sn = md.iloc[0]["site"]
-data[f"site {sn}"] = {}
-data[f"site {sn}"]["config"] = {}
+    except FileNotFoundError:
+        data = {}
 
-global_conf = global_config(md, swi_data)
-data = update_site_config(data,swi_data, sn, global_conf)
-
-
-vlan_conf = config_vlan(swi_data, sn)
-data = update_site_config(data,swi_data, sn, vlan_conf)
-
-trunk_and_dchp_snooping_conf = config_trunk_and_dchp_snooping(swi_data, sn)
-data = update_site_config(data,swi_data, sn, trunk_and_dchp_snooping_conf)
+    return data
 
 
-with open("test.json", "w") as f:
-    f.write(json.dumps(data, indent=4))
+def create_site_sw_config(file, sheet, config_file):
+    sheet_data = read_sheet(file, sheet)
+    data = fetch_site_data(config_file)
+
+    md = sheet_data["md"]
+    swi_data = sheet_data["swi_data"]
+
+    sn = md.iloc[0]["site"]
+    data[f"site {sn}"] = {}
+    data[f"site {sn}"]["config"] = {}
+
+    global_conf = global_config(md, swi_data)
+    data = update_site_config(data, swi_data, sn, global_conf)
+
+    vlan_conf = config_vlan(swi_data, sn)
+    data = update_site_config(data, swi_data, sn, vlan_conf)
+
+    trunk_and_dchp_snooping_conf = config_trunk_and_dchp_snooping(swi_data, sn)
+    data = update_site_config(data, swi_data, sn, trunk_and_dchp_snooping_conf)
+
+    with open(config_file, "w") as f:
+        f.write(json.dumps(data, indent=4))
+
+
+    return data
+
+
+def config_to_text(data, indent=0):
+    lines = []
+    prefix = "    " * indent
+
+    if isinstance(data, dict):
+        for key, value in data.items():
+            lines.append("!")
+            lines.append(prefix + key)
+            lines.extend(config_to_text(value, indent + 1))
+
+    elif isinstance(data, list):
+        for value in data:
+            if isinstance(value, str):
+                lines.append(prefix + value)
+            else:
+                lines.extend(config_to_text(value, indent))
+
+    elif isinstance(data, str):
+        lines.append(prefix + data)
+        
+    lines.append("!")
+  
+    return lines
+
+
+def create_or_update_config_files(data):
+    if not os.path.exists("site_swich_text_configs"):
+        os.makedirs("site_swich_text_configs")
+
+        
+    for site, site_data in data.items():
+        if not os.path.exists(f"site_swich_text_configs/site_{site}"):
+            os.makedirs(f"site_swich_text_configs/site_{site}")
+
+        configs = site_data["config"]
+
+        for sw_name, config in configs.items():
+            text = config_to_text(config)
+
+            with open(
+                f"site_swich_text_configs/site_{site}/{sw_name}.txt",
+                "w",
+                encoding="utf-8"
+            ) as f:
+                f.write("\n".join(text))
+            
+
+    print(f"Text versjon av config for svitjer i site {site}, har blitt lagret i site_swich_text_configs/site_{site}/{sw_name}.txt")
+
+
+def create_sw_configs_main(file, config_file="site_switch_config.json"):   
+
+    sites_sheets = load_workbook(file).sheetnames
+    
+    for sheet in sites_sheets:
+        data = create_site_sw_config(file, sheet, config_file)
+    
+    create_or_update_config_files(data)
+   
+        
+def main():
+    file = sys.argv[1]
+    config_file = "site_switch_config.json" if len(sys.argv) < 3 else sys.argv[2]
+    create_sw_configs_main(file, config_file)
+
+
+if __name__ == "__main__":
+    main()
