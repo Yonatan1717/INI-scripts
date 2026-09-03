@@ -25,7 +25,7 @@ def read_sheet(filename, sheet):
     ip_data_start = md_end + 1
     blank = df.iloc[ip_data_start:].isna().all(axis=1)
     ip_data_end = blank.idxmax()
-    ip_data = df.iloc[ip_data_start:ip_data_end, 0:10]
+    ip_data = df.iloc[ip_data_start:ip_data_end, 0:11]
     ip_data.columns = ip_data.iloc[0]
     ip_data = ip_data[1:].reset_index(drop=True)
 
@@ -132,16 +132,22 @@ def create_interface(ip_data, intf_prefix):
     my_data["network_info"] = {}
     intf_nums = list(ip_data["interface"])
     
-    tot_pri = ip_data["pri-1-10"].sum()
-    pri_prc_for_class_default = 25
-    pri_left = 100 - pri_prc_for_class_default
+    tot_pri_num = ip_data["pri-1-10"].sum()
+    max_prc = 75
+    
     pol_maps= {}
 
     for index, row in ip_data.iterrows():
         vrf = row["vrf"]
         vlan = row["vlan"]
-        pri = row["pri-1-10"]
-        pri_prc = int((pri / tot_pri) * pri_left)
+        pri_afxx = row["pri-afxx"]
+        pri_num = row["pri-1-10"]
+        top_num = str(pri_afxx)[0]
+
+        if tot_pri_num == 0:
+            pri_prc = 0
+        else:
+            pri_prc = int((pri_num / tot_pri_num)*max_prc)
 
         intf = row["interface"]
         sub = True if intf_nums.count(intf) > 1 else False
@@ -158,7 +164,8 @@ def create_interface(ip_data, intf_prefix):
             "sub": sub,
             "address": ip_address,
             "mask": mask,
-            "pri_prc": pri_prc,
+            "pri_afxx": pri_afxx,
+            "pri_num": pri_num,
         }
 
         intf_s = []
@@ -190,28 +197,55 @@ def create_interface(ip_data, intf_prefix):
 
 
         if sub:
-            my_data["config"][f"class-map match-any QRS-CLASS-{vlan}"] = [
-                f"match input-interface {intf_prefix}{intf}.{vlan}",
+            my_data["config"][f"class-map match-any QRS-MARK-{vrf}"] = [
+                f"match vlan {vlan}",
                 "exit"
             ]
+
+            my_data["config"][f"class-map match-any QRS-{vrf}"] = [
+                f"match mpls experimental topmost {top_num}",
+                "exit"
+            ]
+
+            if f"policy-map QRS-SITE-MARK-POLICY" not in pol_maps:
+                pol_maps[f"policy-map QRS-SITE-MARK-POLICY"] = []
 
             if f"policy-map QRS-SITE-POLICY" not in pol_maps:
                 pol_maps[f"policy-map QRS-SITE-POLICY"] = []
 
+
+            pol_maps[f"policy-map QRS-SITE-MARK-POLICY"].append(
+                {
+                    f"class QRS-MARK-{vrf}": [
+                        f"set dscp af{pri_afxx}", 
+                        "exit"
+                    ]
+                }   
+            )
+
             pol_maps[f"policy-map QRS-SITE-POLICY"].append(
                 {
-                    f"class QRS-CLASS-{vlan}": [
+                    f"class QRS-{vrf}": [
                         f"bandwidth percent {pri_prc}", 
                         "exit"
                     ]
                 }   
             )
+            
 
     intf_s = []
     intf_s.append("no shutdown")
     intf_s.append("exit")
     my_data["config"][f"interface {intf_prefix}{intf}"] = intf_s
     
+    if f"policy-map QRS-SITE-MARK-POLICY" in pol_maps:
+        my_data["config"].update(pol_maps)
+        
+        my_data["config"][f"\ninterface {intf_prefix}{intf}"] = [
+            "service-policy input QRS-SITE-MARK-POLICY",
+            "exit"
+        ]
+
     if f"policy-map QRS-SITE-POLICY" in pol_maps:
         my_data["config"].update(pol_maps)
         
@@ -219,8 +253,6 @@ def create_interface(ip_data, intf_prefix):
             "service-policy output QRS-SITE-POLICY",
             "exit"
         ]
-
-        
 
     return my_data
 
@@ -766,7 +798,7 @@ def create_or_update_config_files(data):
         text = config_to_text(config)
 
         with open(
-            f"site_edge_router_text_configs/{site}.txt",
+            f"site_edge_router_text_configs/EDGE_ROUTER_{site.replace(' ', '_').upper()}.txt",
             "w",
             encoding="utf-8"
         ) as f:
@@ -774,7 +806,7 @@ def create_or_update_config_files(data):
             
     
     print()
-    print(f"Text versjon av config for edge router i site {site} er fullført og lagret i site_edge_router_text_configs/{site}.txt")
+    print(f"Text versjon av config for edge router i site {site} er fullført og lagret i site_edge_router_text_configs/EDGE_ROUTER_{site.replace(' ', '_').upper()}.txt")
     print()
     
 
