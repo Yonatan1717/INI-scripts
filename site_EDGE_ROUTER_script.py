@@ -10,50 +10,54 @@ SSH_DOMAIN = "lab.local"
 
 
 def read_sheet(filename, sheet):
-    md_columns = {"site", "intf_prefix", "router-id", "brukernavn", "passord", "vty_lines",}
-    tunnel_columns = {
-        "tunnel id",
-        "gre mode",
-        "ip address",
-        "mask",
-        "vrf",
-        "source",
-        "network-id",
-        "destination",
-        "ipsec",
-        "ipsec key",
+    df = pd.read_excel(
+        filename,
+        sheet_name=sheet,
+        header=None
+    )
+
+    md_start = 0
+    md_end = df.iloc[md_start:].isna().all(axis=1).idxmax()
+    md = df.iloc[md_start:md_end, 0:6]
+    md.columns = md.iloc[0]
+    md = md[1:].reset_index(drop=True)
+
+    ip_data_start = md_end + 1
+    blank = df.iloc[ip_data_start:].isna().all(axis=1)
+    ip_data_end = blank.idxmax()
+    ip_data = df.iloc[ip_data_start:ip_data_end, 0:10]
+    ip_data.columns = ip_data.iloc[0]
+    ip_data = ip_data[1:].reset_index(drop=True)
+
+
+    vrf_data_start = ip_data_end + 1
+    blank = df.iloc[vrf_data_start:].isna().all(axis=1)
+    vrf_data_end = blank.idxmax()
+    vrf_data = df.iloc[vrf_data_start:vrf_data_end, 0:4]
+    vrf_data.columns = vrf_data.iloc[0]
+    vrf_data = vrf_data[1:].reset_index(drop=True)
+    
+    tunnel_data_start = vrf_data_end + 1
+    blank = df.iloc[tunnel_data_start:].isna().all(axis=1)
+    tunnel_data_end = blank.idxmax()
+    tunnel_data = df.iloc[tunnel_data_start:tunnel_data_end, 0:10]
+    tunnel_data.columns = tunnel_data.iloc[0]
+    tunnel_data = tunnel_data[1:].reset_index(drop=True)
+
+    # print(md)
+    # print(ip_data)
+    # print(vrf_data)
+    # print(tunnel_data)
+    # exit(0)
+    
+    return {
+        "md": md,
+        "ip_data": ip_data,
+        "vrf_data": vrf_data,
+        "tunnel_data": tunnel_data,
     }
 
-    return {
-        "md": pd.read_excel(
-            filename,
-            sheet_name=sheet,
-            usecols=lambda c: str(c).strip().lower() in md_columns,
-            skiprows=0,
-            nrows=2
-        ),
-        "ip_data": pd.read_excel(
-            filename,
-            sheet_name=sheet,
-            usecols="A:J",
-            skiprows=3,
-            nrows=4
-        ),
-        "vrf_data": pd.read_excel(
-            filename,
-            sheet_name=sheet,
-            usecols="A:D",
-            skiprows=8,
-            nrows=4
-        ),
-        "tunnel_data": pd.read_excel(
-            filename,
-            sheet_name=sheet,
-            usecols=lambda c: str(c).strip().lower() in tunnel_columns,
-            skiprows=13,
-            nrows=2
-        )
-    }
+    # Removed redundant return statement
 
 
 def is_true(value):
@@ -162,6 +166,18 @@ def create_interface(ip_data, intf_prefix):
         if sub:
             intf_s.append(f"encapsulation dot1Q {vlan}")
 
+            if f"interface {intf_prefix}{intf}.{999}" not in my_data["config"]:
+                my_data["config"][
+                    f"interface {intf_prefix}{intf}.{999}" if sub
+                    else f"interface {intf_prefix}{intf}"
+                ] = [
+                    "description Sub-interface for ubrukt natiiv VLAN",
+                    "encapsulation dot1Q 999 native",
+                    "no ip address",
+                    "no shutdown",
+                    "exit"
+                ]
+
         intf_s.append(f"ip vrf forwarding {vrf}")
         intf_s.append(f"ip address {ip_address} {mask}")
         intf_s.append("no shutdown")
@@ -171,6 +187,7 @@ def create_interface(ip_data, intf_prefix):
             f"interface {intf_prefix}{intf}.{vlan}" if sub
             else f"interface {intf_prefix}{intf}"
         ] = intf_s
+
 
         if sub:
             my_data["config"][f"class-map match-any QRS-CLASS-{vlan}"] = [
@@ -527,7 +544,7 @@ def enable_ssh(md, domain=SSH_DOMAIN):
 
     username = row.get("brukernavn", "")
     password = row.get("passord", "")
-    vty_lines = row.get("vty_lines", 6)
+    vty_lines = row.get("vty_lines", "0-4")
 
     if pd.isna(username) or pd.isna(password):
         return my_data
