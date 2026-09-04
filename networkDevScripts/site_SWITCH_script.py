@@ -183,6 +183,7 @@ def config_vlan(swi_data, site):
                 "switchport port-security violation restrict",
                 "spanning-tree bpduguard enable",
                 "spanning-tree portfast",
+                "no shutdown",
                 "exit"
             ]
 
@@ -237,6 +238,7 @@ def config_trunk_and_dchp_snooping(swi_data, site):
             f"switchport trunk allowed vlan {','.join(map(str, vlans))}",
             f"ip dhcp snooping trust",
             f"ip arp inspection trust",
+            "no shutdown",
             "exit"
         ]
 
@@ -247,6 +249,7 @@ def config_trunk_and_dchp_snooping(swi_data, site):
             "switchport trunk native vlan 999",
             "switchport mode trunk",
             f"switchport trunk allowed vlan {','.join(map(str, vlans))}",
+            "no shutdown",
             "exit"
         ]
     
