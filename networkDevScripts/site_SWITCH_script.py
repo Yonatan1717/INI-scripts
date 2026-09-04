@@ -212,7 +212,9 @@ def config_trunk_and_dchp_snooping(swi_data, site):
             tot_antall_port = antall
 
        
-        vlans.insert(0, mgmg_vlan)
+        if mgmg_vlan not in vlans:
+            vlans.insert(0, mgmg_vlan)
+            
         intf_prefix = row["intf_prefix"]
         num_ports = row["num_ports"]
 
@@ -345,13 +347,13 @@ def config_to_text(data, indent=0):
 
 
 def create_or_update_config_files(data):
-    if not os.path.exists("site_swich_text_configs"):
-        os.makedirs("site_swich_text_configs")
+    if not os.path.exists("siteSwichTextConfigs"):
+        os.makedirs("siteSwichTextConfigs")
 
         
     for site, site_data in data.items():
-        if not os.path.exists(f"site_swich_text_configs/site_{site}"):
-            os.makedirs(f"site_swich_text_configs/site_{site}")
+        if not os.path.exists(f"siteSwichTextConfigs/site_{site}"):
+            os.makedirs(f"siteSwichTextConfigs/site_{site}")
 
         configs = site_data["config"]
 
@@ -359,14 +361,14 @@ def create_or_update_config_files(data):
             text = config_to_text(config)
 
             with open(
-                f"site_swich_text_configs/site_{site}/{sw_name}.txt",
+                f"siteSwichTextConfigs/site_{site}/{sw_name}.txt",
                 "w",
                 encoding="utf-8"
             ) as f:
                 f.write("\n".join(text))
             
 
-    print(f"Text versjon av config for svitjer i site {site}, har blitt lagret i site_swich_text_configs/site_{site}/{sw_name}.txt")
+    print(f"Text versjon av config for svitjer i site {site}, har blitt lagret i siteSwichTextConfigs/site_{site}/{sw_name}.txt")
 
 
 def create_sw_configs_main(file, config_file="site_switch_config.json"):   

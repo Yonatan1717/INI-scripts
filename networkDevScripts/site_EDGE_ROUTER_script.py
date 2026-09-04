@@ -901,15 +901,15 @@ def config_to_text(data, indent=0):
 def create_or_update_config_files(data):
     del data["hub"]
 
-    if not os.path.exists("site_edge_router_text_configs"):
-        os.makedirs("site_edge_router_text_configs")
+    if not os.path.exists("siteEdgeRouterTextConfigs"):
+        os.makedirs("siteEdgeRouterTextConfigs")
 
     for site, site_data in data.items():
         config = site_data["config"]
         text = config_to_text(config)
 
         with open(
-            f"site_edge_router_text_configs/EDGE_ROUTER_{site.replace(' ', '_').upper()}.txt",
+            f"siteEdgeRouterTextConfigs/EDGE_ROUTER_{site.replace(' ', '_').upper()}.txt",
             "w",
             encoding="utf-8"
         ) as f:
@@ -917,7 +917,7 @@ def create_or_update_config_files(data):
             
     
     print()
-    print(f"Text versjon av config for edge router i site {site} er fullført og lagret i site_edge_router_text_configs/EDGE_ROUTER_{site.replace(' ', '_').upper()}.txt")
+    print(f"Text versjon av config for edge router i site {site} er fullført og lagret i siteEdgeRouterTextConfigs/EDGE_ROUTER_{site.replace(' ', '_').upper()}.txt")
     print()
     
 
@@ -932,8 +932,8 @@ def create_edge_router_configs_main(file, config_file="EDGE_ROUTER_configs.json"
 
 
 def main():
-    if not os.path.exists("site_edge_router_text_configs"):
-        os.makedirs("site_edge_router_text_configs")
+    if not os.path.exists("siteEdgeRouterTextConfigs"):
+        os.makedirs("siteEdgeRouterTextConfigs")
 
     sheet_file = sys.argv[1]
     config_file = (
