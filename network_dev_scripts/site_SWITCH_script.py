@@ -40,8 +40,9 @@ def read_sheet(filename, sheet):
 
     return {
         "md": md,
-        "swi_data": swi_data
+        "swi_data": swi_data,
     }
+
 
 def enable_ssh(md, domain=SSH_DOMAIN):
     """
@@ -84,6 +85,7 @@ def enable_ssh(md, domain=SSH_DOMAIN):
 
     return my_data
 
+
 def global_config(md, swi_data):
     info = {}
     info["config"] = {}
@@ -122,7 +124,6 @@ def global_config(md, swi_data):
             f"description Management interface for VLAN {mgmt_vlan}",
             "switchport mode access",
             f"switchport access vlan {mgmt_vlan}",
-            "switchport port-security",
             "switchport port-security maximum 2",
             "switchport port-security violation restrict",
             "spanning-tree bpduguard enable",
@@ -132,9 +133,11 @@ def global_config(md, swi_data):
         ]
 
         info["config"][f"SW{sw_id}-SITE-{site}"][f"ip default-gateway {gatway}"] = []
+        info["config"][f"SW{sw_id}-SITE-{site}"][f"ntp server {gatway}"] = []
 
 
     return info
+
 
 def config_vlan(swi_data, site):
     info = {} 
@@ -176,7 +179,6 @@ def config_vlan(swi_data, site):
                 f"description access port for VLAN {vlan}",
                 "switchport mode access",
                 f"switchport access vlan {vlan}",
-                "switchport port-security",
                 "switchport port-security maximum 2",
                 "switchport port-security violation restrict",
                 "spanning-tree bpduguard enable",
@@ -188,6 +190,7 @@ def config_vlan(swi_data, site):
 
 
     return info
+
 
 def config_trunk_and_dchp_snooping(swi_data, site):
     info = {} 
@@ -261,6 +264,7 @@ def config_trunk_and_dchp_snooping(swi_data, site):
 
 
     return info
+
 
 def update_site_config(data,swi_data, sn, conf):
     for sw_id in swi_data["SW"].unique():

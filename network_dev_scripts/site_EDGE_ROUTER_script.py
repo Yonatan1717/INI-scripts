@@ -694,6 +694,24 @@ def set_up_DHCP_for_vrf_lans(ip_data):
         
     return my_config
 
+
+def config_ntp(sites_data, is_hub, sn):
+    my_config = {}
+    my_config["config"] = {}
+    my_config["network_info"] = {}
+
+
+    if is_hub:
+        my_config["config"]["ntp master 8"] = []
+    else:
+        hub_site = sites_data["hub"]
+        hub_info = sites_data[hub_site]
+        server_ip = hub_info["network_info"]["loopback0"]["address"]
+
+        my_config["config"][f"ntp server {server_ip}"] = []
+
+    return my_config
+    
     
 def configure_site(sheet_file, config_file, sheet):
     sheet_data = read_sheet(sheet_file, sheet)
@@ -720,6 +738,10 @@ def configure_site(sheet_file, config_file, sheet):
     #SSH
     d_ssh = enable_ssh(md)
     my_data["config"].update(d_ssh["config"])
+
+    #NTP
+    d_ntp = config_ntp(data, is_hub, sn)
+    my_data["config"].update(d_ntp["config"])
     
     #VRF
     d_vrf = create_vrf(vrf_data, sn)
@@ -810,7 +832,6 @@ def create_or_update_config_files(data):
     print()
     
 
-
 def create_edge_router_configs_main(file, config_file="EDGE_ROUTER_configs.json"):   
 
     sites_sheets = load_workbook(file).sheetnames
@@ -819,6 +840,7 @@ def create_edge_router_configs_main(file, config_file="EDGE_ROUTER_configs.json"
         data = configure_site(file, config_file, sheet)
     
     create_or_update_config_files(data)
+
 
 def main():
     if not os.path.exists("site_edge_router_text_configs"):
