@@ -18,7 +18,7 @@ def read_sheet(filename, sheet):
 
     md_start = 0
     md_end = df.iloc[md_start:].isna().all(axis=1).idxmax()
-    md = df.iloc[md_start:md_end, 0:6]
+    md = df.iloc[md_start:md_end, 0:7]
     md.columns = md.iloc[0]
     md = md[1:].reset_index(drop=True)
 
@@ -257,7 +257,7 @@ def create_interface(ip_data, intf_prefix):
     return my_data
 
 
-def create_mp_bgp_config(vrf_data, tunnel_data, ip_data, sites_data, router_id, site_number):
+def create_mp_bgp_config(vrf_data, tunnel_data, ip_data, sites_data, router_id, site_number, is_hub):
     my_data = {}
     my_data["config"] = {}
     my_data["network_info"] = {}
@@ -340,6 +340,9 @@ def create_mp_bgp_config(vrf_data, tunnel_data, ip_data, sites_data, router_id, 
 
      
         ipv4_s.append(f"network {vrf_loop_addr} mask {vrf_loop_mask}")
+        if vrf == "INET" and is_hub:
+            ipv4_s.append("network 0.0.0.0 mask 0.0.0.0")
+
         ipv4_s.append("exit-address-family")
 
         bgp_s.append({f"address-family ipv4 vrf {vrf}": ipv4_s})
@@ -695,6 +698,39 @@ def set_up_DHCP_for_vrf_lans(ip_data):
     return my_config
 
 
+def config_nat(md, is_hub):
+    my_config = {}
+    my_config["config"] = {}
+    my_config["network_info"] = {}
+
+    if is_hub:
+        isp_next_hop_addr = md.iloc[0]["isp_next_hop_addr"]
+        my_config["config"]["!\ninterface g0/1"] = [
+            "ip nat inside",
+            "exit"
+        ]
+
+        my_config["config"]["interface g0/2"] = [
+            "ip address dhcp",
+            "ip nat outside",
+            "no shutdown",
+            "exit"
+        ]
+        my_config["config"]["ip access-list standard NAT-INET"] = [
+            "permit any",
+            "exit"
+        ]
+        my_config["config"]["ip nat inside source list NAT-INET interface g0/2 vrf INET overload"] = []
+        my_config["config"]["!\ninterface g0/0.20"] = [
+            "ip nat inside",
+            "exit"
+        ]
+
+        my_config["config"][f"ip route vrf INET 0.0.0.0 0.0.0.0 {isp_next_hop_addr} global"] = []
+
+    return my_config
+
+
 def config_ntp(sites_data, is_hub, sn):
     my_config = {}
     my_config["config"] = {}
@@ -759,7 +795,7 @@ def configure_site(sheet_file, config_file, sheet):
     my_data["network_info"].update(d_dhcp["network_info"])
     
     #BGP
-    d_bgp, data = create_mp_bgp_config(vrf_data, tunnel_data, ip_data, data, router_id, sn)
+    d_bgp, data = create_mp_bgp_config(vrf_data, tunnel_data, ip_data, data, router_id, sn, is_hub)
     my_data["config"].update(d_bgp["config"])
 
     #TUNNEL
@@ -771,6 +807,10 @@ def configure_site(sheet_file, config_file, sheet):
     d_eigrp = create_tunnel_eigrp_config(vrf_data, tunnel_data, ip_data, is_hub)
     my_data["config"].update(d_eigrp["config"])
     my_data["network_info"].update(d_eigrp["network_info"])
+
+    #NAT
+    d_nat = config_nat(md, is_hub)
+    my_data["config"].update(d_nat["config"])
     
     #INTerFACE PREFIX
     my_data["intf_prefix"] = intf_prefix
