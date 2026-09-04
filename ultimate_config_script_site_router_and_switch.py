@@ -19,8 +19,9 @@ if not os.path.exists("network_configs"):
 os.chdir("network_configs")
 
 try:
-    create_sw_configs_main(abs_path)
     create_edge_router_configs_main(abs_path)
+    
+    create_sw_configs_main(abs_path)
 finally:
     os.chdir(org_cwd)
 

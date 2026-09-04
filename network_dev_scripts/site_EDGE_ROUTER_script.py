@@ -155,7 +155,10 @@ def create_interface(ip_data, intf_prefix):
         ip_address = row["address min"]
         mask = row["mask"]
 
-        my_data["network_info"][
+        if "interfaces" not in my_data["network_info"]:
+            my_data["network_info"]["interfaces"] = {}
+
+        my_data["network_info"]["interfaces"][
             f"{intf_prefix}{intf}.{vlan}" if sub else f"{intf_prefix}{intf}"
         ] = {
             "vrf": vrf,
@@ -563,7 +566,7 @@ def create_tunnel_eigrp_config(vrf_data, tunnel_data, ip_data, is_hub):
     return my_data
 
 
-def enable_ssh(md, domain=SSH_DOMAIN):
+def enable_ssh(md, vrf_data, ip_data, sites_data, sn, domain=SSH_DOMAIN):
     """
     Genererer lokal SSH-konfig
     brukernavn + passord.
@@ -596,13 +599,57 @@ def enable_ssh(md, domain=SSH_DOMAIN):
     ] = []
     my_data["config"]["crypto key generate rsa general-keys modulus 4096"] = []
     my_data["config"]["ip ssh version 2"] = []
+    
+    
+    this_site = f"site {sn}"
+    
+    other_sites = sites_data.copy()
+
+    if "hub" in other_sites:
+        del other_sites["hub"]
+        
+    if this_site in other_sites:
+        del other_sites[this_site]
+    
+    my_mgmt_ip_data = ip_data[ip_data["vrf"] == "MGMT"].iloc[0]
+    my_network = my_mgmt_ip_data.get("nett id", "")
+    my_mask = my_mgmt_ip_data.get("mask", "")
+    my_network, my_mask, my_wild = getNetId(my_network, my_mask)
+    
+    my_vrf = vrf_data[vrf_data["vrf"] == "MGMT"].iloc[0]
+    my_vrf_laddr = my_vrf.get("laddr", "")
+    
+
+    
+    permit_s = []
+    permit_s.append(f"permit {my_network} {my_wild}")
+    permit_s.append(f"permit {my_vrf_laddr} 0.0.0.0")
+    
+    for site, site_data in other_sites.items():
+        interfaces = site_data["network_info"].get("interfaces", [])
+        for intf, intf_data in interfaces.items():
+            vrf = intf_data.get("vrf", "")
+            if vrf == "MGMT":
+                ip_address = intf_data.get("address", "")
+                network = str(ipaddress.ip_address(ip_address) - 1)
+                mask = intf_data.get("mask", "")
+                network, mask, wild = getNetId(network, mask)
+                permit_s.append(f"permit {network} {wild}")
+
+                if f"permit {my_network} {my_wild}" not in sites_data[site]["config"][f"ip access-list standard SSH-MGMT-ONLY"]:
+                    sites_data[site]["config"][f"ip access-list standard SSH-MGMT-ONLY"].append(f"permit {my_network} {my_wild}")
+                
+    my_data["config"][f"ip access-list standard SSH-MGMT-ONLY"] = permit_s
+
+    
     my_data["config"][f"line vty {' '.join(x.strip(' ') for x in vty_lines.split('-'))}"] = [
+        "access-class SSH-MGMT-ONLY in vrf-also",
         "login local",
         "transport input ssh",
         "exit",
     ]
 
-    return my_data
+    return my_data, sites_data
 
 
 def fetch_site_data(config_file, site_number):
@@ -635,17 +682,17 @@ def create_global_config(router_id, intf_prefix, sn):
 
     my_data["config"][f"hostname RS{sn}"] = []
 
-    ospf_s = []
-    ospf_s.append(f"router-id {router_id}")
-    ospf_s.append("exit")
-    my_data["config"]["router ospf 1"] = ospf_s
-
     my_data["config"]["interface loopback0"] = []
     my_data["config"]["interface loopback0"].append(
         f"ip address {router_id} 255.255.255.255"
     )
     my_data["config"]["interface loopback0"].append("ip ospf 1 area 0")
     my_data["config"]["interface loopback0"].append("exit")
+
+    ospf_s = []
+    ospf_s.append(f"router-id {router_id}")
+    ospf_s.append("exit")
+    my_data["config"]["router ospf 1"] = ospf_s
 
     my_data["config"]["mpls ldp router-id Loopback0 force"] = []
 
@@ -732,7 +779,7 @@ def config_nat(md, is_hub):
     return my_config
 
 
-def config_ntp(sites_data, is_hub, sn):
+def config_ntp(sites_data, is_hub):
     my_config = {}
     my_config["config"] = {}
     my_config["network_info"] = {}
@@ -769,15 +816,16 @@ def configure_site(sheet_file, config_file, sheet):
 
     data, is_hub = fetch_site_data(config_file, sn)
     
+    
     #OPPRETT GLOBAL KONFIGURASJON
     my_data = create_global_config(router_id, intf_prefix, sn)
     
     #SSH
-    d_ssh = enable_ssh(md)
+    d_ssh, data = enable_ssh(md, vrf_data, ip_data, data, sn)
     my_data["config"].update(d_ssh["config"])
 
     #NTP
-    d_ntp = config_ntp(data, is_hub, sn)
+    d_ntp = config_ntp(data, is_hub)
     my_data["config"].update(d_ntp["config"])
     
     #VRF
