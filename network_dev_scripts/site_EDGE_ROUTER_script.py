@@ -18,7 +18,7 @@ def read_sheet(filename, sheet):
 
     md_start = 0
     md_end = df.iloc[md_start:].isna().all(axis=1).idxmax()
-    md = df.iloc[md_start:md_end, 0:7]
+    md = df.iloc[md_start:md_end, 0:6]
     md.columns = md.iloc[0]
     md = md[1:].reset_index(drop=True)
 
@@ -704,7 +704,8 @@ def config_nat(md, is_hub):
     my_config["network_info"] = {}
 
     if is_hub:
-        isp_next_hop_addr = md.iloc[0]["isp_next_hop_addr"]
+        intf_prefix = md.iloc[0]["intf_prefix"]
+
         my_config["config"]["!\ninterface g0/1"] = [
             "ip nat inside",
             "exit"
@@ -720,13 +721,13 @@ def config_nat(md, is_hub):
             "permit any",
             "exit"
         ]
-        my_config["config"]["ip nat inside source list NAT-INET interface g0/2 vrf INET overload"] = []
-        my_config["config"]["!\ninterface g0/0.20"] = [
+        my_config["config"][f"ip nat inside source list NAT-INET interface {intf_prefix}2 vrf INET overload"] = []
+        my_config["config"][f"!\ninterface {intf_prefix}0.20"] = [
             "ip nat inside",
             "exit"
         ]
 
-        my_config["config"][f"ip route vrf INET 0.0.0.0 0.0.0.0 {isp_next_hop_addr} global"] = []
+        my_config["config"][f"ip route vrf INET 0.0.0.0 0.0.0.0 {intf_prefix}2 dhcp"] = []
 
     return my_config
 
