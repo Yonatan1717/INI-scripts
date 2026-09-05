@@ -19,7 +19,7 @@ def read_sheet(filename, sheet):
 
     md_end = df.iloc[md_start:].isna().all(axis=1).idxmax()
 
-    md = df.iloc[md_start:md_end, 0:4]
+    md = df.iloc[md_start:md_end, 0:5]
     md.columns = md.iloc[0]
     md = md[1:].reset_index(drop=True)
 
@@ -92,6 +92,7 @@ def global_config(md, swi_data):
     info["network_info"] = {}
 
     site = md.iloc[0]["site"]
+    secret = md.iloc[0].get("secret", "")
 
     for idx, row in swi_data.iterrows():
         sw_id = row["SW"]
@@ -105,6 +106,7 @@ def global_config(md, swi_data):
             info["config"][f"SW{sw_id}-SITE-{site}"] = {}
 
         info["config"][f"SW{sw_id}-SITE-{site}"][f"hostname SW{sw_id}-SITE-{site}"] = []
+        info["config"][f"SW{sw_id}-SITE-{site}"][f"enable secret 9 {secret}"] = []
 
         ssh_config = enable_ssh(md)
         info["config"][f"SW{sw_id}-SITE-{site}"].update(ssh_config["config"])

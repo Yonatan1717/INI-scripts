@@ -18,7 +18,7 @@ def read_sheet(filename, sheet):
 
     md_start = 0
     md_end = df.iloc[md_start:].isna().all(axis=1).idxmax()
-    md = df.iloc[md_start:md_end, 0:6]
+    md = df.iloc[md_start:md_end, 0:7]
     md.columns = md.iloc[0]
     md = md[1:].reset_index(drop=True)
 
@@ -675,12 +675,15 @@ def fetch_site_data(config_file, site_number):
     return data, hub == f"site {site_number}"
 
 
-def create_global_config(router_id, intf_prefix, sn):
+def create_global_config(md, router_id, intf_prefix, sn):
     my_data = {}
     my_data["config"] = {}
     my_data["network_info"] = {}
 
+    secret = md.iloc[0].get("secret", "")
+
     my_data["config"][f"hostname RS{sn}"] = []
+    my_data["config"][f"enable secret 9 {secret}"] = []
 
     my_data["config"]["interface loopback0"] = []
     my_data["config"]["interface loopback0"].append(
@@ -818,7 +821,7 @@ def configure_site(sheet_file, config_file, sheet):
     
     
     #OPPRETT GLOBAL KONFIGURASJON
-    my_data = create_global_config(router_id, intf_prefix, sn)
+    my_data = create_global_config(md,router_id, intf_prefix, sn)
     
     #SSH
     d_ssh, data = enable_ssh(md, vrf_data, ip_data, data, sn)
